@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de Scouting | Predicción de Jugadores Élite</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --ink: #1c2430; --muted: #5d6877; --line: #d9dfe6;
+    --brand: #1f6f8b; --brand-ink: #ffffff; --elite: #1e8e5a; --std: #e07a3f; --err: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); }
+  header { background: var(--brand); color: var(--brand-ink); padding: 20px 16px; }
+  header h1 { margin: 0; font-size: 1.35rem; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: .92rem; }
+  main { max-width: 1040px; margin: 24px auto; padding: 0 16px; display: grid;
+         grid-template-columns: 1.4fr 1fr; gap: 20px; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .card h2 { margin: 0 0 14px; font-size: 1.05rem; }
+  fieldset { border: 0; padding: 0; margin: 0 0 14px; }
+  legend { font-weight: 600; font-size: .85rem; color: var(--muted); text-transform: uppercase;
+           letter-spacing: .04em; margin-bottom: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; }
+  label { display: flex; flex-direction: column; font-size: .85rem; gap: 4px; }
+  label small { color: var(--muted); font-size: .75rem; }
+  input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+                  background: #fff; color: var(--ink); }
+  input:focus, select:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  button { font: inherit; font-weight: 600; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+           border: 1px solid var(--brand); }
+  .primary { background: var(--brand); color: var(--brand-ink); }
+  .secondary { background: #fff; color: var(--brand); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .api { display: flex; gap: 8px; align-items: center; font-size: .82rem; color: var(--muted); margin-bottom: 14px; }
+  .api input { flex: 1; min-width: 0; padding: 6px 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.ok { background: var(--elite); } .dot.fail { background: var(--err); }
+  #resultado .vacio { color: var(--muted); font-size: .92rem; }
+  .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700;
+           font-size: 1.1rem; color: #fff; }
+  .badge.elite { background: var(--elite); } .badge.std { background: var(--std); }
+  .pct { font-size: 2.4rem; font-weight: 800; margin: 14px 0 4px; }
+  .barra { height: 22px; background: #e7ebef; border-radius: 999px; overflow: hidden; position: relative; }
+  .relleno { height: 100%; width: 0; border-radius: 999px; transition: width .9s ease, background .3s; }
+  .marca { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--ink); opacity: .5; }
+  .leyenda { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); margin-top: 4px; }
+  .nota { font-size: .82rem; color: var(--muted); margin-top: 14px; line-height: 1.45; }
+  .error { color: var(--err); font-weight: 600; }
+  ul.hist { list-style: none; padding: 0; margin: 10px 0 0; font-size: .85rem; }
+  ul.hist li { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding: 6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sistema de Scouting · Predicción de Jugadores Élite</h1>
+  <p>Random Forest servido por una API REST (FastAPI). Élite = top 25 % del valor de mercado.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Datos del jugador</h2>
+    <div class="api">
+      <span class="dot" id="estadoApi" title="Estado de la API"></span>
+      <span>API:</span>
+      <input id="apiUrl" value="http://127.0.0.1:8000" aria-label="URL de la API">
+    </div>
+
+    <form id="form" novalidate>
+      <fieldset>
+        <legend>Jugador</legend>
+        <div class="grid">
+          <label>Nombre <input name="jugador" type="text" maxlength="100" value="Candidato A"></label>
+          <label>Posición
+            <select name="posicion" required>
+              <option value="Attack">Delantero (Attack)</option>
+              <option value="Defender" selected>Defensa (Defender)</option>
+              <option value="Midfield">Mediocampista (Midfield)</option>
+              <option value="Goalkeeper">Portero (Goalkeeper)</option>
+            </select></label>
+          <label>Edad (años) <input name="edad" type="number" min="15" max="50" value="22"></label>
+          <label>Estatura (cm) <input name="estatura_cm" type="number" step="1" min="150" max="215" value="188"></label>
+        </div>
+        <p class="nota">Si deja la edad o la estatura vacías, la API las imputa con las medianas guardadas en el modelo.</p>
+      </fieldset>
+
+      <div class="actions">
+        <button class="primary" type="submit" id="btn">Evaluar jugador</button>
+        <button class="secondary" type="button" data-perfil="A">Candidato A</button>
+        <button class="secondary" type="button" data-perfil="B">Candidato B</button>
+        <button class="secondary" type="button" data-perfil="C">Candidato C</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" aria-live="polite">
+    <h2>Resultado</h2>
+    <div id="resultado"><p class="vacio">Complete el formulario y pulse "Evaluar jugador".</p></div>
+    <ul class="hist" id="historial"></ul>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const form = $("#form");
+const NOMBRES_POS = { Attack: "Delantero", Defender: "Defensa", Midfield: "Mediocampista", Goalkeeper: "Portero" };
+
+// mismos candidatos del laboratorio de clase
+const PERFILES = {
+  A: { jugador: "Candidato A", posicion: "Defender", estatura_cm: 188, edad: 22 },
+  B: { jugador: "Candidato B", posicion: "Goalkeeper", estatura_cm: "", edad: 29 },
+  C: { jugador: "Candidato C", posicion: "Midfield", estatura_cm: 172, edad: 19 },
+};
+
+function apiBase() { return $("#apiUrl").value.trim().replace(/\/+$/, ""); }
+
+async function comprobarApi() {
+  const dot = $("#estadoApi");
+  try {
+    const r = await fetch(apiBase() + "/health");
+    dot.className = "dot " + (r.ok ? "ok" : "fail");
+  } catch { dot.className = "dot fail"; }
+}
+
+function leerFormulario() {
+  const f = Object.fromEntries(new FormData(form).entries());
+  return {
+    jugador: f.jugador.trim() || null,
+    posicion: f.posicion,
+    edad: f.edad === "" ? null : parseInt(f.edad, 10),
+    estatura_cm: f.estatura_cm === "" ? null : parseFloat(f.estatura_cm),
+  };
+}
+
+function pintar(res) {
+  const elite = res.prediccion === 1;
+  const color = elite ? "var(--elite)" : "var(--std)";
+  const umbral = res.umbral_valor_eur.toLocaleString("es");
+  const imput = res.campos_imputados.length
+    ? `<p class="nota">Campos imputados con la mediana: <b>${res.campos_imputados.join(", ")}</b>.</p>` : "";
+  $("#resultado").innerHTML = `
+    <span class="badge ${elite ? "elite" : "std"}">${res.etiqueta}</span>
+    <div class="pct" style="color:${color}">${res.probabilidad_elite.toFixed(1)} %</div>
+    <div>Probabilidad de pertenecer al grupo Élite</div>
+    <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="${res.probabilidad_elite}"><div class="relleno" id="relleno"></div><div class="marca"></div></div>
+    <div class="leyenda"><span>0 %</span><span>Umbral 50 %</span><span>100 %</span></div>
+    <p class="nota">Élite = valor de mercado ≥ percentil 75 (${umbral} EUR).</p>${imput}`;
+  const relleno = $("#relleno");
+  relleno.style.background = color;
+  requestAnimationFrame(() => requestAnimationFrame(() => { relleno.style.width = res.probabilidad_elite + "%"; }));
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!form.reportValidity()) return;
+  const btn = $("#btn");
+  btn.disabled = true; btn.textContent = "Evaluando…";
+  const datos = leerFormulario();
+  try {
+    const r = await fetch(apiBase() + "/predict", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos),
+    });
+    const res = await r.json();
+    if (!r.ok) {
+      const det = Array.isArray(res.detail) ? res.detail.map((d) => `${d.loc.at(-1)}: ${d.msg}`).join("; ") : res.detail;
+      throw new Error(det || `HTTP ${r.status}`);
+    }
+    pintar(res);
+    const li = document.createElement("li");
+    const edad = datos.edad ?? "edad imputada";
+    li.innerHTML = `<span>${datos.jugador ?? "Sin nombre"} (${NOMBRES_POS[datos.posicion]}, ${edad})</span><b>${res.etiqueta} · ${res.probabilidad_elite.toFixed(1)} %</b>`;
+    $("#historial").prepend(li);
+    $("#estadoApi").className = "dot ok";
+  } catch (err) {
+    $("#resultado").innerHTML = `<p class="error">No se pudo obtener la predicción.</p><p class="nota">${err.message}. Verifique que la API esté en ejecución (uvicorn main_api:app --port 8000).</p>`;
+    $("#estadoApi").className = "dot fail";
+  } finally {
+    btn.disabled = false; btn.textContent = "Evaluar jugador";
+  }
+});
+
+document.querySelectorAll("[data-perfil]").forEach((b) => b.addEventListener("click", () => {
+  const p = PERFILES[b.dataset.perfil];
+  for (const [k, v] of Object.entries(p)) form.elements[k].value = v;
+}));
+$("#apiUrl").addEventListener("change", comprobarApi);
+comprobarApi();
+</script>
+</body>
+</html>
